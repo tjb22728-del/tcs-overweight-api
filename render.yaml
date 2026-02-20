@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: tcs-overweight-api
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
+    envVars:
+      - key: SF_USER
+        value: ZMDNZIEQEO_USER
+      - key: SF_PASSWORD
+        sync: false          # You will enter this manually in Render dashboard
+      - key: SF_ACCOUNT
+        value: redzone-prod_direct_access_reader
+      - key: SF_DATABASE
+        value: ZMDNZIEQEO_DB
+      - key: SF_SCHEMA
+        value: tillamook-country-smoker-org
+      - key: SF_WAREHOUSE
+        value: PROD_DIRECT_ACCESS_WAREHOUSE

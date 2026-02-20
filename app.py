@@ -77,13 +77,21 @@ def refresh_cache():
             product = product.strip()
             if product not in data:
                 data[product] = []
-            data[product].append({
-                "week_start": week_start.strftime("%Y-%m-%d") if hasattr(week_start, "strftime") else str(week_start),
-                "avg_overweight": float(avg_ow) if avg_ow is not None else 0,
-                "avg_value": float(avg_val) if avg_val is not None else 0,
-                "avg_target": float(avg_tgt) if avg_tgt is not None else 0,
-                "count": count,
-            })
+import math
+
+def safe_float(val):
+    if val is None:
+        return 0
+    f = float(val)
+    return 0 if math.isnan(f) or math.isinf(f) else f
+
+data[product].append({
+    "week_start": week_start.strftime("%Y-%m-%d") if hasattr(week_start, "strftime") else str(week_start),
+    "avg_overweight": safe_float(avg_ow),
+    "avg_value": safe_float(avg_val),
+    "avg_target": safe_float(avg_tgt),
+    "count": count,
+})
 
         refreshed_at = datetime.utcnow().isoformat() + "Z"
 

@@ -37,14 +37,15 @@ FROM ZMDNZIEQEO_DB."tillamook-country-smoker-org"."v_spcsample" s
 JOIN ZMDNZIEQEO_DB."tillamook-country-smoker-org"."v_completeddataitem" d
     ON s."runUUID" = d."runUUID"
     AND s."characteristicUUID" = d."characteristicUUID"
+    AND d."completeTime" >= DATEADD(week, -26, CURRENT_DATE)
+    AND d."void" = false
+    AND d."productName" IS NOT NULL
+    AND d."productSku" IS NOT NULL
 WHERE
     s."completeTime" >= DATEADD(week, -26, CURRENT_DATE)
     AND s."characteristicName" ILIKE '%Product Weight%'
     AND s."thresholdTarget" IS NOT NULL
     AND s."deleted" = false
-    AND d."void" = false
-    AND d."productName" IS NOT NULL
-    AND d."productSku" IS NOT NULL
 GROUP BY 1, 2
 ORDER BY 2, 1
 """

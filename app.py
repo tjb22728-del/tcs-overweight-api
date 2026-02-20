@@ -27,7 +27,7 @@ def get_connection():
     )
 
 
-QUERY = """
+QUERY = "SHOW TABLES"
 SELECT
     DATE_TRUNC('week', COMPLETE_TIME)::DATE   AS week_start,
     PRODUCT,

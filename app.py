@@ -79,8 +79,11 @@ def overweights():
             "data":         data,
         })
 
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
+except Exception as e:
+        import traceback
+        error_detail = traceback.format_exc()
+        print(f"FULL ERROR: {error_detail}")
+        return jsonify({"status": "error", "message": str(e), "detail": error_detail}), 500
 
 
 @app.route("/health", methods=["GET"])

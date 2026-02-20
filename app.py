@@ -26,33 +26,25 @@ def get_connection():
 
 
 QUERY = """
-WITH samples AS (
-    SELECT
-        "completeTime",
-        "productName" || ' (' || "productSku" || ')'  AS product,
-        "target",
-        f.value::FLOAT  AS sample_value
-    FROM ZMDNZIEQEO_DB."tillamook-country-smoker-org"."v_completeddataitem",
-        LATERAL FLATTEN(input => SPLIT("values", ',')) f
-    WHERE
-        "completeTime" >= DATEADD(week, -26, CURRENT_DATE)
-        AND "void" = false
-        AND "characteristicName" ILIKE '%Product Weight%'
-        AND "values" IS NOT NULL
-        AND "target" IS NOT NULL
-        AND "target" != ''
-        AND "productName" IS NOT NULL
-        AND TRY_TO_DOUBLE(f.value) IS NOT NULL
-)
 SELECT
-    DATE_TRUNC('week', "completeTime")::DATE           AS week_start,
-    product,
-    ROUND(AVG(sample_value - TRY_TO_DOUBLE("target")), 2)  AS avg_overweight,
-    ROUND(AVG(sample_value), 2)                            AS avg_value,
-    ROUND(AVG(TRY_TO_DOUBLE("target")), 2)                 AS avg_target,
-    COUNT(*)                                               AS sample_count
-FROM samples
-WHERE TRY_TO_DOUBLE("target") > 0
+    DATE_TRUNC('week', s."completeTime")::DATE              AS week_start,
+    d."productName" || ' (' || d."productSku" || ')'        AS product,
+    ROUND(AVG(s."value" - s."thresholdTarget"), 2)          AS avg_overweight,
+    ROUND(AVG(s."value"), 2)                                AS avg_value,
+    ROUND(AVG(s."thresholdTarget"), 2)                      AS avg_target,
+    COUNT(*)                                                AS sample_count
+FROM ZMDNZIEQEO_DB."tillamook-country-smoker-org"."v_spcsample" s
+JOIN ZMDNZIEQEO_DB."tillamook-country-smoker-org"."v_completeddataitem" d
+    ON s."runUUID" = d."runUUID"
+    AND s."characteristicUUID" = d."characteristicUUID"
+WHERE
+    s."completeTime" >= DATEADD(week, -26, CURRENT_DATE)
+    AND s."characteristicName" ILIKE '%Product Weight%'
+    AND s."thresholdTarget" IS NOT NULL
+    AND s."deleted" = false
+    AND d."void" = false
+    AND d."productName" IS NOT NULL
+    AND d."productSku" IS NOT NULL
 GROUP BY 1, 2
 ORDER BY 2, 1
 """

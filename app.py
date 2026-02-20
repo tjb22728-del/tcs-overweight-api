@@ -12,7 +12,6 @@ SF_USER      = os.environ.get("SF_USER",      "ZMDNZIEQEO_USER")
 SF_PASSWORD  = os.environ.get("SF_PASSWORD",  "")
 SF_ACCOUNT   = os.environ.get("SF_ACCOUNT",   "redzone-prod_direct_access_reader")
 SF_DATABASE  = os.environ.get("SF_DATABASE",  "ZMDNZIEQEO_DB")
-SF_SCHEMA    = os.environ.get("SF_SCHEMA",    "tillamook-country-smoker-org")
 SF_WAREHOUSE = os.environ.get("SF_WAREHOUSE", "PROD_DIRECT_ACCESS_WAREHOUSE")
 
 
@@ -28,20 +27,24 @@ def get_connection():
 
 QUERY = """
 SELECT
-    DATE_TRUNC('week', "completeTime")::DATE        AS week_start,
-    "characteristicName"                             AS product,
-    ROUND(AVG("value" - "thresholdTarget"), 2)       AS avg_overweight,
-    ROUND(AVG("value"), 2)                           AS avg_value,
-    ROUND(AVG("thresholdTarget"), 2)                 AS avg_target,
-    COUNT(*)                                         AS sample_count
-FROM ZMDNZIEQEO_DB."tillamook-country-smoker-org"."v_spcsample"
+    DATE_TRUNC('week', "completeTime")::DATE            AS week_start,
+    "productName" || ' (' || "productSku" || ')'        AS product,
+    ROUND(AVG(TRY_CAST("values" AS FLOAT) - TRY_CAST("target" AS FLOAT)), 2)  AS avg_overweight,
+    ROUND(AVG(TRY_CAST("values" AS FLOAT)), 2)          AS avg_value,
+    ROUND(AVG(TRY_CAST("target" AS FLOAT)), 2)          AS avg_target,
+    COUNT(*)                                            AS sample_count
+FROM ZMDNZIEQEO_DB."tillamook-country-smoker-org"."v_completeddataitem"
 WHERE
     "completeTime" >= DATEADD(week, -26, CURRENT_DATE)
-    AND "deleted" = false
-    AND "value" IS NOT NULL
-    AND "thresholdTarget" IS NOT NULL
-    AND "thresholdTarget" > 0
-    AND "characteristicName" ILIKE '%weight%'
+    AND "void" = false
+    AND "characteristicName" ILIKE '%Product Weight%'
+    AND "values" IS NOT NULL
+    AND "target" IS NOT NULL
+    AND "target" != ''
+    AND TRY_CAST("values" AS FLOAT) IS NOT NULL
+    AND TRY_CAST("target" AS FLOAT) IS NOT NULL
+    AND TRY_CAST("target" AS FLOAT) > 0
+    AND "productName" IS NOT NULL
 GROUP BY 1, 2
 ORDER BY 2, 1
 """
@@ -74,6 +77,7 @@ def overweights():
         return jsonify({
             "status": "ok",
             "refreshed_at": datetime.utcnow().isoformat() + "Z",
+            "product_count": len(data),
             "data": data,
         })
 
@@ -85,20 +89,6 @@ def overweights():
             "message": str(e),
             "detail": full_trace,
         }), 500
-
-
-@app.route("/api/tables", methods=["GET"])
-def list_tables():
-    try:
-        conn = get_connection()
-        cur = conn.cursor()
-        cur.execute('SHOW VIEWS IN SCHEMA ZMDNZIEQEO_DB."tillamook-country-smoker-org"')
-        rows = cur.fetchall()
-        cur.close()
-        conn.close()
-        return jsonify({"views": [row[1] for row in rows]})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/health", methods=["GET"])

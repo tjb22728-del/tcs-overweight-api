@@ -24,14 +24,14 @@ _cache_lock = threading.Lock()
 
 
 def safe_float(val):
-    """Convert to float, returning 0 for None/NaN/Inf."""
+    """Convert to float, returning None for None/NaN/Inf."""
     if val is None:
-        return 0
+        return None
     try:
         f = float(val)
-        return 0 if math.isnan(f) or math.isinf(f) else round(f, 2)
+        return None if math.isnan(f) or math.isinf(f) else round(f, 2)
     except (TypeError, ValueError):
-        return 0
+        return None
 
 
 def get_connection():
@@ -48,12 +48,15 @@ def get_connection():
 
 QUERY = """
 SELECT
-    DATE_TRUNC('week', s."completeTime")::DATE              AS week_start,
-    d."productName" || ' (' || d."productSku" || ')'        AS product,
-    ROUND(AVG(s."value" - s."thresholdTarget"), 2)          AS avg_overweight,
-    ROUND(AVG(s."value"), 2)                                AS avg_value,
-    ROUND(AVG(s."thresholdTarget"), 2)                      AS avg_target,
-    COUNT(*)                                                AS sample_count
+    DATE_TRUNC('week', s."completeTime")::DATE                  AS week_start,
+    d."productName" || ' (' || d."productSku" || ')'            AS product,
+    ROUND(AVG(s."value" - s."thresholdTarget"), 2)              AS avg_overweight,
+    ROUND(AVG(s."value"), 2)                                    AS avg_value,
+    ROUND(AVG(s."thresholdTarget"), 2)                          AS avg_target,
+    ROUND(AVG(s."thresholdLowerSpecLimit"), 2)                  AS avg_lower_spec,
+    ROUND(AVG(s."thresholdUpperSpecLimit"), 2)                  AS avg_upper_spec,
+    ROUND(AVG(s."centerLine"), 2)                               AS avg_center_line,
+    COUNT(*)                                                    AS sample_count
 FROM ZMDNZIEQEO_DB."tillamook-country-smoker-org"."v_spcsample" s
 JOIN ZMDNZIEQEO_DB."tillamook-country-smoker-org"."v_completeddataitem" d
     ON s."runUUID" = d."runUUID"
@@ -85,15 +88,18 @@ def refresh_cache():
 
         data = {}
         for row in rows:
-            week_start, product, avg_ow, avg_val, avg_tgt, count = row
+            week_start, product, avg_ow, avg_val, avg_tgt, avg_lower, avg_upper, avg_center, count = row
             product = product.strip()
             if product not in data:
                 data[product] = []
             data[product].append({
                 "week_start": week_start.strftime("%Y-%m-%d") if hasattr(week_start, "strftime") else str(week_start),
-                "avg_overweight": safe_float(avg_ow),
-                "avg_value": safe_float(avg_val),
+                "avg_overweight": safe_float(avg_ow) or 0,
+                "avg_value": safe_float(avg_val) or 0,
                 "avg_target": safe_float(avg_tgt),
+                "avg_lower_spec": safe_float(avg_lower),
+                "avg_upper_spec": safe_float(avg_upper),
+                "avg_center_line": safe_float(avg_center),
                 "count": count,
             })
 

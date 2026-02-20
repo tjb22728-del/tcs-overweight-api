@@ -3,7 +3,7 @@ services:
     name: tcs-overweight-api
     env: python
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app:app
+    startCommand: gunicorn app:app --timeout 120
     envVars:
       - key: SF_USER
         value: ZMDNZIEQEO_USER

@@ -29,21 +29,18 @@ QUERY = """
 SELECT
     DATE_TRUNC('week', "completeTime")::DATE            AS week_start,
     "productName" || ' (' || "productSku" || ')'        AS product,
-    ROUND(AVG(TRY_CAST("values" AS FLOAT) - TRY_CAST("target" AS FLOAT)), 2)  AS avg_overweight,
-    ROUND(AVG(TRY_CAST("values" AS FLOAT)), 2)          AS avg_value,
-    ROUND(AVG(TRY_CAST("target" AS FLOAT)), 2)          AS avg_target,
-    COUNT(*)                                            AS sample_count
+    ROUND(AVG(TRY_CAST(NULLIF("values", '') AS FLOAT) - TRY_CAST(NULLIF("target", '') AS FLOAT)), 2)  AS avg_overweight,
+    ROUND(AVG(TRY_CAST(NULLIF("values", '') AS FLOAT)), 2)   AS avg_value,
+    ROUND(AVG(TRY_CAST(NULLIF("target", '') AS FLOAT)), 2)   AS avg_target,
+    COUNT(*)                                                  AS sample_count
 FROM ZMDNZIEQEO_DB."tillamook-country-smoker-org"."v_completeddataitem"
 WHERE
     "completeTime" >= DATEADD(week, -26, CURRENT_DATE)
     AND "void" = false
     AND "characteristicName" ILIKE '%Product Weight%'
-    AND "values" IS NOT NULL
-    AND "target" IS NOT NULL
-    AND "target" != ''
-    AND TRY_CAST("values" AS FLOAT) IS NOT NULL
-    AND TRY_CAST("target" AS FLOAT) IS NOT NULL
-    AND TRY_CAST("target" AS FLOAT) > 0
+    AND NULLIF("values", '') IS NOT NULL
+    AND NULLIF("target", '') IS NOT NULL
+    AND TRY_CAST(NULLIF("target", '') AS FLOAT) > 0
     AND "productName" IS NOT NULL
 GROUP BY 1, 2
 ORDER BY 2, 1

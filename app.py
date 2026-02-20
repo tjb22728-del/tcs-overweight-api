@@ -83,3 +83,15 @@ def health():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
+@app.route("/api/tables", methods=["GET"])
+def list_tables():
+    try:
+        conn = get_connection()
+        cur = conn.cursor()
+        cur.execute("SHOW TABLES")
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+        return jsonify({"tables": [row[1] for row in rows]})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500

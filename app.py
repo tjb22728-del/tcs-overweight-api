@@ -1,5 +1,6 @@
 import os
 import json
+import math
 import traceback
 import threading
 from datetime import datetime
@@ -20,6 +21,17 @@ CACHE_FILE = "/tmp/overweight_cache.json"
 
 _cache = {"data": None, "refreshed_at": None, "status": "initializing"}
 _cache_lock = threading.Lock()
+
+
+def safe_float(val):
+    """Convert to float, returning 0 for None/NaN/Inf."""
+    if val is None:
+        return 0
+    try:
+        f = float(val)
+        return 0 if math.isnan(f) or math.isinf(f) else round(f, 2)
+    except (TypeError, ValueError):
+        return 0
 
 
 def get_connection():
@@ -77,21 +89,13 @@ def refresh_cache():
             product = product.strip()
             if product not in data:
                 data[product] = []
-import math
-
-def safe_float(val):
-    if val is None:
-        return 0
-    f = float(val)
-    return 0 if math.isnan(f) or math.isinf(f) else f
-
-data[product].append({
-    "week_start": week_start.strftime("%Y-%m-%d") if hasattr(week_start, "strftime") else str(week_start),
-    "avg_overweight": safe_float(avg_ow),
-    "avg_value": safe_float(avg_val),
-    "avg_target": safe_float(avg_tgt),
-    "count": count,
-})
+            data[product].append({
+                "week_start": week_start.strftime("%Y-%m-%d") if hasattr(week_start, "strftime") else str(week_start),
+                "avg_overweight": safe_float(avg_ow),
+                "avg_value": safe_float(avg_val),
+                "avg_target": safe_float(avg_tgt),
+                "count": count,
+            })
 
         refreshed_at = datetime.utcnow().isoformat() + "Z"
 
@@ -169,5 +173,5 @@ def health():
 
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
+    port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port)

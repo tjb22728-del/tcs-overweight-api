@@ -1,5 +1,7 @@
 import os
+import json
 import traceback
+import threading
 from datetime import datetime
 from flask import Flask, jsonify
 from flask_cors import CORS
@@ -13,6 +15,13 @@ SF_PASSWORD  = os.environ.get("SF_PASSWORD",  "")
 SF_ACCOUNT   = os.environ.get("SF_ACCOUNT",   "redzone-prod_direct_access_reader")
 SF_DATABASE  = os.environ.get("SF_DATABASE",  "ZMDNZIEQEO_DB")
 SF_WAREHOUSE = os.environ.get("SF_WAREHOUSE", "PROD_DIRECT_ACCESS_WAREHOUSE")
+
+CACHE_FILE = "/tmp/overweight_cache.json"
+REFRESH_INTERVAL_HOURS = 6
+
+# In-memory cache
+_cache = {"data": None, "refreshed_at": None, "status": "initializing"}
+_cache_lock = threading.Lock()
 
 
 def get_connection():
@@ -51,8 +60,9 @@ ORDER BY 2, 1
 """
 
 
-@app.route("/api/overweights", methods=["GET"])
-def overweights():
+def refresh_cache():
+    global _cache
+    print(f"[{datetime.utcnow().isoformat()}] Starting Snowflake refresh...")
     try:
         conn = get_connection()
         cur = conn.cursor()
@@ -75,26 +85,86 @@ def overweights():
                 "count": count,
             })
 
-        return jsonify({
-            "status": "ok",
-            "refreshed_at": datetime.utcnow().isoformat() + "Z",
-            "product_count": len(data),
-            "data": data,
-        })
+        refreshed_at = datetime.utcnow().isoformat() + "Z"
+
+        # Save to file as backup
+        with open(CACHE_FILE, "w") as f:
+            json.dump({"data": data, "refreshed_at": refreshed_at, "product_count": len(data)}, f)
+
+        with _cache_lock:
+            _cache = {"data": data, "refreshed_at": refreshed_at, "status": "ok", "product_count": len(data)}
+
+        print(f"[{datetime.utcnow().isoformat()}] Cache refreshed — {len(data)} products loaded.")
 
     except Exception as e:
         full_trace = traceback.format_exc()
-        print("FULL ERROR:\n" + full_trace)
+        print(f"CACHE REFRESH ERROR:\n{full_trace}")
+        # Try to load from file backup if available
+        if os.path.exists(CACHE_FILE):
+            with open(CACHE_FILE) as f:
+                cached = json.load(f)
+            with _cache_lock:
+                _cache = {**cached, "status": "stale", "error": str(e)}
+            print("Loaded stale cache from file.")
+        else:
+            with _cache_lock:
+                _cache = {"data": None, "refreshed_at": None, "status": "error", "error": str(e)}
+
+
+def schedule_refresh():
+    """Run refresh immediately, then every REFRESH_INTERVAL_HOURS hours."""
+    refresh_cache()
+    interval_seconds = REFRESH_INTERVAL_HOURS * 3600
+    timer = threading.Timer(interval_seconds, schedule_refresh)
+    timer.daemon = True
+    timer.start()
+
+
+# Start background refresh on startup
+refresh_thread = threading.Thread(target=schedule_refresh, daemon=True)
+refresh_thread.start()
+
+
+@app.route("/api/overweights", methods=["GET"])
+def overweights():
+    with _cache_lock:
+        cache = dict(_cache)
+
+    if cache["status"] == "initializing":
+        return jsonify({
+            "status": "initializing",
+            "message": "Data is loading from Snowflake, please check back in 60 seconds.",
+        }), 202
+
+    if cache["status"] == "error" and cache.get("data") is None:
         return jsonify({
             "status": "error",
-            "message": str(e),
-            "detail": full_trace,
+            "message": cache.get("error", "Unknown error"),
         }), 500
+
+    return jsonify({
+        "status": "ok",
+        "refreshed_at": cache.get("refreshed_at"),
+        "product_count": cache.get("product_count", 0),
+        "cache_status": cache["status"],
+        "data": cache["data"],
+    })
+
+
+@app.route("/api/refresh", methods=["POST"])
+def force_refresh():
+    """Manually trigger a cache refresh."""
+    thread = threading.Thread(target=refresh_cache, daemon=True)
+    thread.start()
+    return jsonify({"status": "ok", "message": "Refresh started, check back in ~60 seconds."})
 
 
 @app.route("/health", methods=["GET"])
 def health():
-    return jsonify({"status": "ok"})
+    with _cache_lock:
+        cache_status = _cache.get("status", "unknown")
+        refreshed_at = _cache.get("refreshed_at")
+    return jsonify({"status": "ok", "cache": cache_status, "refreshed_at": refreshed_at})
 
 
 if __name__ == "__main__":

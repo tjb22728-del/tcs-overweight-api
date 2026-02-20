@@ -17,9 +17,7 @@ SF_DATABASE  = os.environ.get("SF_DATABASE",  "ZMDNZIEQEO_DB")
 SF_WAREHOUSE = os.environ.get("SF_WAREHOUSE", "PROD_DIRECT_ACCESS_WAREHOUSE")
 
 CACHE_FILE = "/tmp/overweight_cache.json"
-REFRESH_INTERVAL_HOURS = 6
 
-# In-memory cache
 _cache = {"data": None, "refreshed_at": None, "status": "initializing"}
 _cache_lock = threading.Lock()
 
@@ -34,14 +32,6 @@ def get_connection():
         ocsp_fail_open=True,
         insecure_mode=True,
     )
-```
-
-The addition of `insecure_mode=True` bypasses the OCSP check entirely — this is the nuclear option for this specific SSL validation error on cloud hosting environments. It's safe to use since Snowflake's own connection is still fully encrypted, it just skips the certificate revocation check that Render's network is blocking.
-
-After you commit, watch the Render logs — within 90 seconds of startup you should see:
-```
-Starting Snowflake refresh...
-Cache refreshed — X products loaded.
 
 
 QUERY = """
@@ -72,7 +62,7 @@ ORDER BY 2, 1
 
 def refresh_cache():
     global _cache
-    print(f"[{datetime.utcnow().isoformat()}] Starting Snowflake refresh...")
+    print("Starting Snowflake refresh...")
     try:
         conn = get_connection()
         cur = conn.cursor()
@@ -97,40 +87,34 @@ def refresh_cache():
 
         refreshed_at = datetime.utcnow().isoformat() + "Z"
 
-        # Save to file as backup
         with open(CACHE_FILE, "w") as f:
             json.dump({"data": data, "refreshed_at": refreshed_at, "product_count": len(data)}, f)
 
         with _cache_lock:
             _cache = {"data": data, "refreshed_at": refreshed_at, "status": "ok", "product_count": len(data)}
 
-        print(f"[{datetime.utcnow().isoformat()}] Cache refreshed — {len(data)} products loaded.")
+        print("Cache refreshed -- " + str(len(data)) + " products loaded.")
 
     except Exception as e:
         full_trace = traceback.format_exc()
-        print(f"CACHE REFRESH ERROR:\n{full_trace}")
-        # Try to load from file backup if available
+        print("CACHE REFRESH ERROR:\n" + full_trace)
         if os.path.exists(CACHE_FILE):
             with open(CACHE_FILE) as f:
                 cached = json.load(f)
             with _cache_lock:
                 _cache = {**cached, "status": "stale", "error": str(e)}
-            print("Loaded stale cache from file.")
         else:
             with _cache_lock:
                 _cache = {"data": None, "refreshed_at": None, "status": "error", "error": str(e)}
 
 
 def schedule_refresh():
-    """Run refresh immediately, then every REFRESH_INTERVAL_HOURS hours."""
     refresh_cache()
-    interval_seconds = REFRESH_INTERVAL_HOURS * 3600
-    timer = threading.Timer(interval_seconds, schedule_refresh)
+    timer = threading.Timer(6 * 3600, schedule_refresh)
     timer.daemon = True
     timer.start()
 
 
-# Start background refresh on startup
 refresh_thread = threading.Thread(target=schedule_refresh, daemon=True)
 refresh_thread.start()
 
@@ -163,7 +147,6 @@ def overweights():
 
 @app.route("/api/refresh", methods=["POST"])
 def force_refresh():
-    """Manually trigger a cache refresh."""
     thread = threading.Thread(target=refresh_cache, daemon=True)
     thread.start()
     return jsonify({"status": "ok", "message": "Refresh started, check back in ~60 seconds."})

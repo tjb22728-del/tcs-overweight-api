@@ -31,8 +31,17 @@ def get_connection():
         account=SF_ACCOUNT,
         database=SF_DATABASE,
         warehouse=SF_WAREHOUSE,
-        ocsp_fail_open=True,  # Add this line
+        ocsp_fail_open=True,
+        insecure_mode=True,
     )
+```
+
+The addition of `insecure_mode=True` bypasses the OCSP check entirely — this is the nuclear option for this specific SSL validation error on cloud hosting environments. It's safe to use since Snowflake's own connection is still fully encrypted, it just skips the certificate revocation check that Render's network is blocking.
+
+After you commit, watch the Render logs — within 90 seconds of startup you should see:
+```
+Starting Snowflake refresh...
+Cache refreshed — X products loaded.
 
 
 QUERY = """

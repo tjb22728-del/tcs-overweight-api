@@ -26,22 +26,33 @@ def get_connection():
 
 
 QUERY = """
+WITH samples AS (
+    SELECT
+        "completeTime",
+        "productName" || ' (' || "productSku" || ')'  AS product,
+        "target",
+        f.value::FLOAT  AS sample_value
+    FROM ZMDNZIEQEO_DB."tillamook-country-smoker-org"."v_completeddataitem",
+        LATERAL FLATTEN(input => SPLIT("values", ',')) f
+    WHERE
+        "completeTime" >= DATEADD(week, -26, CURRENT_DATE)
+        AND "void" = false
+        AND "characteristicName" ILIKE '%Product Weight%'
+        AND "values" IS NOT NULL
+        AND "target" IS NOT NULL
+        AND "target" != ''
+        AND "productName" IS NOT NULL
+        AND TRY_TO_DOUBLE(f.value) IS NOT NULL
+)
 SELECT
-    DATE_TRUNC('week', "completeTime")::DATE            AS week_start,
-    "productName" || ' (' || "productSku" || ')'        AS product,
-    ROUND(AVG(TRY_CAST(NULLIF("values", '') AS FLOAT) - TRY_CAST(NULLIF("target", '') AS FLOAT)), 2)  AS avg_overweight,
-    ROUND(AVG(TRY_CAST(NULLIF("values", '') AS FLOAT)), 2)   AS avg_value,
-    ROUND(AVG(TRY_CAST(NULLIF("target", '') AS FLOAT)), 2)   AS avg_target,
-    COUNT(*)                                                  AS sample_count
-FROM ZMDNZIEQEO_DB."tillamook-country-smoker-org"."v_completeddataitem"
-WHERE
-    "completeTime" >= DATEADD(week, -26, CURRENT_DATE)
-    AND "void" = false
-    AND "characteristicName" ILIKE '%Product Weight%'
-    AND NULLIF("values", '') IS NOT NULL
-    AND NULLIF("target", '') IS NOT NULL
-    AND TRY_CAST(NULLIF("target", '') AS FLOAT) > 0
-    AND "productName" IS NOT NULL
+    DATE_TRUNC('week', "completeTime")::DATE           AS week_start,
+    product,
+    ROUND(AVG(sample_value - TRY_TO_DOUBLE("target")), 2)  AS avg_overweight,
+    ROUND(AVG(sample_value), 2)                            AS avg_value,
+    ROUND(AVG(TRY_TO_DOUBLE("target")), 2)                 AS avg_target,
+    COUNT(*)                                               AS sample_count
+FROM samples
+WHERE TRY_TO_DOUBLE("target") > 0
 GROUP BY 1, 2
 ORDER BY 2, 1
 """

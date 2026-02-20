@@ -51,29 +51,18 @@ def overweights():
     try:
         conn = get_connection()
         cur = conn.cursor()
-        cur.execute(QUERY)
+        cur.execute("SHOW TABLES")
         rows = cur.fetchall()
         cur.close()
         conn.close()
-
-        data = {}
-        for row in rows:
-            week_start, product, avg_ow, avg_val, avg_tgt, count = row
-            product = product.strip()
-            if product not in data:
-                data[product] = []
-            data[product].append({
-                "week_start": week_start.strftime("%Y-%m-%d") if hasattr(week_start, "strftime") else str(week_start),
-                "avg_overweight": avg_ow,
-                "avg_value": avg_val,
-                "avg_target": avg_tgt,
-                "count": count,
-            })
-
         return jsonify({
             "status": "ok",
-            "refreshed_at": datetime.utcnow().isoformat() + "Z",
-            "data": data,
+            "tables": [str(row) for row in rows]
+        })
+    except Exception as e:
+        full_trace = traceback.format_exc()
+        print("FULL ERROR:\n" + full_trace)
+        return jsonify({"status": "error", "message": str(e), "detail": full_trace}), 500
         })
 
     except Exception as e:

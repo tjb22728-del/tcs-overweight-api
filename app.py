@@ -31,6 +31,7 @@ def get_connection():
         account=SF_ACCOUNT,
         database=SF_DATABASE,
         warehouse=SF_WAREHOUSE,
+        ocsp_fail_open=True,  # Add this line
     )
 
 

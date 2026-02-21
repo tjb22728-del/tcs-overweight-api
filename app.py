@@ -128,7 +128,7 @@ def refresh_cache():
 
 def schedule_refresh():
     refresh_cache()
-    timer = threading.Timer(6 * 3600, schedule_refresh)
+    timer = threading.Timer(60 * 60, schedule_refresh)
     timer.daemon = True
     timer.start()
 
